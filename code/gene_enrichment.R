@@ -99,9 +99,9 @@ for (ref_name in names(reference_gene_sets)) {
   all_configs[[paste0("1st_2nd_combined_", ref_name)]] <- combined
   
   cat(sprintf("%s:\n", ref_name))
-  cat(sprintf("  1st degree: %d genes\n", length(first_filtered)))
-  cat(sprintf("  2nd degree: %d genes\n", length(second_filtered)))
-  cat(sprintf("  Combined: %d genes\n\n", length(combined)))
+  cat(sprintf("1st degree: %d genes\n", length(first_filtered)))
+  cat(sprintf("2nd degree: %d genes\n", length(second_filtered)))
+  cat(sprintf("Combined: %d genes\n\n", length(combined)))
 }
 
 # Permutation testing
@@ -195,20 +195,15 @@ for (config_name in names(all_configs)) {
 }
 
 # Save results
-
 results_df <- bind_rows(all_results)
 
 write.csv(results_df,
           "./figures/enrichment_combined/enrichment_permutation_results_all.csv",
           row.names = FALSE)
 
-cat("Results saved to: enrichment_permutation_results_all.csv\n\n")
-
 # Plot with each configuration with broken axes
-
 for (config_name in names(perm_data)) {
-  
-  result   <- perm_data[[config_name]]
+  result <- perm_data[[config_name]]
   ref_name <- results_df$Reference_Set[results_df$Configuration == config_name]
   
   filename <- sprintf("./figures/enrichment_combined/permutation_%s.pdf", config_name)
@@ -220,25 +215,25 @@ for (config_name in names(perm_data)) {
   exp_fraction   <- result$expected_count / result$total_network_size
   
   h <- hist(null_fractions, breaks = 50, plot = FALSE)
-  
   y_max <- max(h$counts) * 1.25
   
-  # broken axis plot
-  null_max <- max(null_fractions)
+  null_max   <- max(null_fractions)
   null_width <- null_max - min(h$mids)
-  gap_width <- null_width * 0.1
-  obs_width <- obs_fraction * 0.05
+  gap_width  <- null_width * 0.1
+  obs_width  <- obs_fraction * 0.05
+  
+  ref_title <- switch(ref_name,
+                      "SMC"    = "Smooth Muscle Cell Enriched Interactions",
+                      "OMIM"   = "Coronary Artery Disease GWAS Enriched Interactions (OMIM)",
+                      "Aragam" = "Coronary Artery Disease GWAS Enriched Interactions (Aragam et al.)",
+                      ref_name
+  )
   
   plot(NA, xlim = c(0, null_width + gap_width + obs_width * 2), 
        ylim = c(0, y_max),
        xlab = sprintf("Fraction of total network (%s genes)", ref_name),
        ylab = "Frequency",
-       main = sprintf("%s\nObserved: %.1f%% | Expected: %.1f%% ± %.2f%%",
-                      config_name, 
-                      obs_fraction * 100,
-                      exp_fraction * 100,
-                      (result$sd / result$total_network_size) * 100,
-                      result$fold_enrichment),
+       main = ref_title,,
        xaxt = "n",
        cex.main = 0.9)
   
@@ -246,11 +241,7 @@ for (config_name in names(perm_data)) {
   null_x_transformed <- h$mids - min(h$mids)
   lines(null_x_transformed, h$counts, lwd = 2, col = "gray60")
   
-  # plot expected line
-  exp_x_transformed <- exp_fraction - min(h$mids)
-  abline(v = exp_x_transformed, col = "#1f77b4", lwd = 2, lty = 2)
-  
-  # observed line
+  # observed line only
   obs_x_transformed <- null_width + gap_width + obs_width
   abline(v = obs_x_transformed, col = "black", lwd = 3)
   
@@ -261,84 +252,66 @@ for (config_name in names(perm_data)) {
   segments(break_x + gap_width * 0.05, -y_max * 0.02, 
            break_x + gap_width * 0.15, y_max * 0.02, lwd = 2)
   
-  # Draw axis lines with breaks
-  # Left section
   segments(0, 0, null_width, 0, lwd = 1)
-  # Right section  
   segments(null_width + gap_width, 0, 
            null_width + gap_width + obs_width * 2, 0, lwd = 1)
   
-  # Custom x-axis ticks
-  # Custom x-axis ticks with adaptive precision
   left_ticks <- pretty(c(min(h$mids), null_max), n = 5)
   left_ticks <- left_ticks[left_ticks >= min(h$mids) & left_ticks <= null_max]
   
-  # Use 4 decimal places for fractions
   axis(1, at = left_ticks - min(h$mids), 
        labels = sprintf("%.4f", left_ticks))
-  
   axis(1, at = obs_x_transformed, 
        labels = sprintf("%.4f", obs_fraction))
   
-  
-  # Add text annotations
-  text(exp_x_transformed, y_max * 0.85,
-       sprintf("Expected = %.1f%%",
-               exp_fraction * 100),
-       pos = 4, col = "#1f77b4", font = 2, cex = 1.0)
+  if (result$p_value == 0) {
+    p_label <- bquote("Observed P < " * 10^-4)  # since n_permutations = 10,000
+  } else {
+    p_exp <- floor(log10(result$p_value))
+    p_label <- bquote("Observed P < " * 10^.(p_exp))
+  }
   
   text(obs_x_transformed, y_max * 0.85,
-       sprintf("Observed = %.1f%%\nFold = %.2fx\nP = %.4f",
-               obs_fraction * 100, 
-               result$fold_enrichment,
-               result$p_value),
+       p_label,
        pos = 2, col = "black", font = 2, cex = 1.0)
   
   dev.off()
   cat(sprintf("  Saved: %s\n", basename(filename)))
 }
 
-# Summary Bar Plots
-for (ref_name in names(reference_gene_sets)) {
-  
-  subset_data <- results_df %>%
-    filter(Reference_Set == ref_name) %>%
-    arrange(Configuration)
-  
-  if (nrow(subset_data) == 0) next
-  
-  pdf(sprintf("./figures/enrichment_combined/summary_%s.pdf", ref_name), 
-      width = 9, height = 6)
-  
-  # Create shorter configuration labels
-  short_labels <- gsub("1st_2nd_combined_", "Combined_", subset_data$Configuration)
-  short_labels <- gsub("1st_degree_", "1st_", short_labels)
-  short_labels <- gsub("2nd_degree_", "2nd_", short_labels)
-  short_labels <- gsub(paste0("_", ref_name), "", short_labels)
-  
-  bar_vals <- matrix(
-    c(subset_data$Obs_Fraction_Pct, subset_data$Expected_Frac_Pct),
-    nrow = 2, byrow = TRUE,
-    dimnames = list(c("Observed", "Expected"), short_labels)
-  )
-  
-  bp <- barplot(bar_vals,
-                beside = TRUE,
-                col = c("#d62728", "#1f77b4"),
-                ylim = c(0, max(bar_vals) * 1.3),
-                ylab = sprintf("%% of total network (%s genes)", ref_name),
-                main = sprintf("%s Enrichment vs Random Sampling", ref_name),
-                las = 1,
-                cex.names = 0.85,
-                legend.text = rownames(bar_vals),
-                args.legend = list(x = "topright", bty = "n", cex = 0.9))
-  
-  # significance annotations
-  for (i in seq_along(subset_data$Configuration)) {
-    if (subset_data$Significant[i]) {
-      text(mean(bp[, i]), max(bar_vals[, i]) * 1.08, "***", cex = 1.4)
-    }
+# Summary Bar Plot
+
+combined_data <- results_df %>%
+  filter(grepl("1st_2nd_combined", Configuration))
+
+ref_titles <- c(
+  "SMC"    = "SMC",
+  "OMIM"   = "OMIM",
+  "Aragam" = "Aragam et al."
+)
+
+bar_vals <- matrix(
+  c(combined_data$Obs_Fraction_Pct, combined_data$Expected_Frac_Pct),
+  nrow = 2, byrow = TRUE,
+  dimnames = list(c("Observed", "Expected"), ref_titles[combined_data$Reference_Set])
+)
+
+pdf("./figures/enrichment_combined/summary_all_combined.pdf", width = 9, height = 6)
+
+bp <- barplot(bar_vals,
+              beside = TRUE,
+              col = c("#d62728", "#1f77b4"),
+              ylim = c(0, 40),
+              ylab = "% of total network",
+              main = "Gene Set Enrichment vs Random Sampling",
+              las = 1,
+              cex.names = 0.9,
+              legend.text = rownames(bar_vals),
+              args.legend = list(x = "topright", bty = "n", cex = 0.9))
+
+for (i in seq_along(combined_data$Reference_Set)) {
+  if (combined_data$Significant[i]) {
+    text(mean(bp[, i]), max(bar_vals[, i]) * 1.2, "***", cex = 1.4)
   }
-  
-  dev.off()
 }
+dev.off()
