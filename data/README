@@ -1,0 +1,16 @@
+
+Datasets Required
+========
+
+1. Master Annotated Network
+	- Description: 
+	- Path: 
+
+2. BIOGRID Dataset
+	- Description: BioGRID data for secondary interactions.
+	- Path: BIOGRID-ORGANISM-Homo_sapiens-5.0.252.tab3.txt
+
+3. BioPlex HEK293T Dataset
+	- Description: BioGRID data for HEK293T-specific secondary interactions.
+	- Path: BioPlex_293T_Network_10K_Dec_2019.tsv
+	- Source: https://bioplex.hms.harvard.edu/interactions.php
